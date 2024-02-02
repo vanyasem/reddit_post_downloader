@@ -52,6 +52,8 @@
             console.log(matchedLinks.size + ' links appended to clipboard!');
             if (matchedLinks.size == 25) {
               navigateToNextPage();
+            } else {
+              changeCategory();
             }
           })
           .catch((error) => {
@@ -68,6 +70,22 @@
     var nextPageLinkElement = elements[0].firstChild;
     var nextPageLinkUrl = nextPageLinkElement.getAttribute('href', 2);
     window.location.href = nextPageLinkUrl;
+  }
+
+  function stripQueryStringAndHashFromPath(url) {
+    return url.split('?')[0].split('#')[0];
+  }
+
+  function changeCategory() {
+    var url = window.location.href;
+    var path = stripQueryStringAndHashFromPath(url);
+    if (url.includes('new')) {
+      window.location.href = path + '?sort=top';
+    } else if (url.includes('top')) {
+      window.location.href = path + '?sort=hot';
+    } else if (url.includes('hot')) {
+      window.location.href = path + '?sort=controversial';
+    }
   }
 
   grabRedditLinks();
