@@ -1,19 +1,15 @@
-import os
-import tempfile
 import argparse
-import requests
 import json
-import time
+import os
 import re
-import pyperclip
+import tempfile
+import time
 import traceback
-from selenium import webdriver
-from selenium.webdriver.common.by import By
-from moviepy.editor import VideoFileClip, AudioFileClip
 
-import chromedriver_autoinstaller
-
-chromedriver_autoinstaller.install()
+import pyperclip
+import requests
+from camoufox.sync_api import Camoufox
+from moviepy.editor import AudioFileClip, VideoFileClip
 
 
 def sanitize_filename(filename):
@@ -200,7 +196,7 @@ def get_posts_on_page(page_data):
     return post_data_list, last_id
 
 
-def get_posts(subreddit, driver, limit, sort_category, sort_range):
+def get_posts(subreddit, limit, sort_category, sort_range):
     post_data_list = []
 
     url = f"https://www.reddit.com/r/{subreddit}/{sort_category}/.json?t={sort_range}"
@@ -212,52 +208,52 @@ def get_posts(subreddit, driver, limit, sort_category, sort_range):
     last_count = len(post_data_list)
     after_id = None  # How reddit API handles pagination
 
-    while searching:
-        try:
-            new_url = url
-            if after_id:
-                new_url += f"&after={after_id}"
+    with Camoufox(headless=True) as browser:
+        page = browser.new_page()
+        while searching:
+            try:
+                new_url = url
+                if after_id:
+                    new_url += f"&after={after_id}"
 
-            driver.get(new_url)
-            data_str = driver.find_element(By.TAG_NAME, 'pre').text
-            data = json.loads(data_str)
-            page_data = data.get("data")
+                page.goto(new_url)
+                data_str = page.locator('pre').all_text_contents()[0]
+                data = json.loads(data_str)
+                page_data = data.get("data")
 
-            if page_data is None:
-                # No more data to fetch, break out of the loop
-                break
+                if page_data is None:
+                    # No more data to fetch, break out of the loop
+                    break
 
-            new_post_data, after_id = get_posts_on_page(page_data)
-            post_data_list.extend(new_post_data)
+                new_post_data, after_id = get_posts_on_page(page_data)
+                post_data_list.extend(new_post_data)
 
-            current_count = len(post_data_list)
-            if limit != 0:
-                if current_count >= limit:
-                    post_data_list = post_data_list[:limit]
-                    driver.quit()
-                    print(f"{len(post_data_list)} posts found! Saving...")
-                    return post_data_list
+                current_count = len(post_data_list)
+                if limit != 0:
+                    if current_count >= limit:
+                        post_data_list = post_data_list[:limit]
+                        print(f"{len(post_data_list)} posts found! Saving...")
+                        return post_data_list
 
-            if current_count == last_count:
-                # Increment this count for each page that is checked where no new data is grabbed
-                # Can occur when subreddit doesn't have as many posts as the set limit
-                fail_count += 1
-                print(f"Failed to find new posts: {fail_count}/{fail_limit}")
+                if current_count == last_count:
+                    # Increment this count for each page that is checked where no new data is grabbed
+                    # Can occur when subreddit doesn't have as many posts as the set limit
+                    fail_count += 1
+                    print(f"Failed to find new posts: {fail_count}/{fail_limit}")
 
-            if fail_count > fail_limit:
+                if fail_count > fail_limit:
+                    searching = False
+                else:
+                    print(f"Found {len(new_post_data)} new posts. Total: {current_count}. Sleeping {sleep_time} seconds.")
+                    time.sleep(sleep_time)
+                last_count = current_count
+            except Exception as e:
+                traceback.print_exc()
+                print(e)
                 searching = False
-            else:
-                print(f"Found {len(new_post_data)} new posts. Total: {current_count}. Sleeping {sleep_time} seconds.")
-                time.sleep(sleep_time)
-            last_count = current_count
-        except Exception as e:
-            traceback.print_exc()
-            print(e)
-            searching = False
 
-    driver.quit()
-    print(f"{len(post_data_list)} posts found! Saving...")
-    return post_data_list
+            print(f"{len(post_data_list)} posts found! Saving...")
+            return post_data_list
 
 
 def validate_args(args):
@@ -290,79 +286,75 @@ def main():
     args = parser.parse_args()
     validate_args(args)
 
-    chrome_options = webdriver.ChromeOptions()
-    chrome_options.add_argument("--headless")
-    chrome_options.add_argument("--no-sandbox")
-    chrome_options.add_argument("--disable-gpu")
-    driver = webdriver.Chrome(options=chrome_options)
-
-    if args.post:
-        try:
-            post_url = args.post
-            if ".json" not in post_url:
-                post_url = post_url + ".json"
-            driver.get(post_url)
-            data_str = driver.find_element(By.TAG_NAME, 'pre').text
-            data = json.loads(data_str)[0]
-            post_data = data["data"]["children"][0]["data"]
-            save_post(post_data, args.output)
-
-        except Exception:
-            traceback.print_exc()
-            print("Failed to download the post.")
-
-    elif args.file:
-        file_path = args.file
-        valid_links = verify_reddit_links_in_file(file_path)
-        if valid_links:
-            for link in valid_links:
-                try:
-                    post_url = link + ".json"
-                    driver.get(post_url)
-                    data_str = driver.find_element(By.TAG_NAME, 'pre').text
-                    data = json.loads(data_str)[0]
-                    post_data = data["data"]["children"][0]["data"]
-                    save_post(post_data, args.output)
-
-                except Exception:
-                    traceback.print_exc()
-                    print("Failed to download the post.")
-
-        else:
-            print("Invalid link found or no links given")
-            print("link file should be one link per line with no extra characters")
-
-    elif args.web:
-        clipboard_content = pyperclip.paste()
-        valid_links = verify_reddit_links_in_clipboard(clipboard_content)
-        if valid_links:
-            for link in valid_links:
-                try:
-                    post_url = link + ".json"
-                    driver.get(post_url)
-                    data_str = driver.find_element(By.TAG_NAME, 'pre').text
-                    data = json.loads(data_str)[0]
-                    post_data = data["data"]["children"][0]["data"]
-                    save_post(post_data, args.output)
-
-                except Exception:
-                    traceback.print_exc()
-                    print("Failed to download the post.")
-
-        else:
-            print("Invalid link found or no links found in clipboard")
-            print("Clipboard should contain one reddit link per line")
-
-    elif args.subreddit:
-        post_data_list = get_posts(args.subreddit, driver, args.limit, args.category, args.range)
-
-        for i, post_data in enumerate(post_data_list):
+    with Camoufox(headless=True) as browser:
+        page = browser.new_page()
+        if args.post:
             try:
-                print(f"\nSaving post {i + 1} out of {len(post_data_list)}.\n")
+                post_url = args.post
+                if ".json" not in post_url:
+                    post_url = post_url + ".json"
+                page.goto(post_url)
+                data_str = page.locator('pre').all_text_contents()[0]
+                data = json.loads(data_str)[0]
+                post_data = data["data"]["children"][0]["data"]
                 save_post(post_data, args.output)
+
             except Exception:
                 traceback.print_exc()
-                print(f"Failed to download {post_data['permalink']}")
+                print("Failed to download the post.")
+
+        elif args.file:
+            file_path = args.file
+            valid_links = verify_reddit_links_in_file(file_path)
+            if valid_links:
+                for link in valid_links:
+                    try:
+                        post_url = link + ".json"
+                        page.goto(post_url)
+                        data_str = page.locator('pre').all_text_contents()[0]
+                        data = json.loads(data_str)[0]
+                        post_data = data["data"]["children"][0]["data"]
+                        save_post(post_data, args.output)
+
+                    except Exception:
+                        traceback.print_exc()
+                        print("Failed to download the post.")
+
+            else:
+                print("Invalid link found or no links given")
+                print("link file should be one link per line with no extra characters")
+
+        elif args.web:
+            clipboard_content = pyperclip.paste()
+            valid_links = verify_reddit_links_in_clipboard(clipboard_content)
+            if valid_links:
+                for link in valid_links:
+                    try:
+                        post_url = link + ".json"
+                        page.goto(post_url)
+                        data_str = page.locator('pre').all_text_contents()[0]
+                        data = json.loads(data_str)[0]
+                        post_data = data["data"]["children"][0]["data"]
+                        save_post(post_data, args.output)
+
+                    except Exception:
+                        traceback.print_exc()
+                        print("Failed to download the post.")
+
+            else:
+                print("Invalid link found or no links found in clipboard")
+                print("Clipboard should contain one reddit link per line")
+
+        elif args.subreddit:
+            post_data_list = get_posts(args.subreddit, args.limit, args.category, args.range)
+
+            for i, post_data in enumerate(post_data_list):
+                try:
+                    print(f"\nSaving post {i + 1} out of {len(post_data_list)}.\n")
+                    save_post(post_data, args.output)
+                except Exception:
+                    traceback.print_exc()
+                    print(f"Failed to download {post_data['permalink']}")
 
 
 if __name__ == "__main__":
