@@ -313,6 +313,7 @@ def main():
                 for link in valid_links:
                     try:
                         post_url = link + ".json"
+                        print(post_url)
                         page.goto(post_url)
                         data_str = page.locator('pre').all_text_contents()[0]
                         data = json.loads(data_str)[0]
@@ -335,6 +336,7 @@ def main():
                 for link in valid_links:
                     try:
                         post_url = link + ".json"
+                        print(post_url)
                         page.goto(post_url)
                         data_str = page.locator('pre').all_text_contents()[0]
                         data = json.loads(data_str)[0]
