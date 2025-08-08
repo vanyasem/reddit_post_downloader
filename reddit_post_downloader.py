@@ -286,8 +286,11 @@ def main():
     args = parser.parse_args()
     validate_args(args)
 
-    with Camoufox(headless=True) as browser:
+    with Camoufox(os="macos") as browser:
         page = browser.new_page()
+        page.goto('https://www.reddit.com/login/')
+        page.wait_for_url('https://www.reddit.com');
+
         if args.post:
             try:
                 post_url = args.post
