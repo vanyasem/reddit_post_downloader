@@ -322,6 +322,7 @@ def main():
                     except Exception:
                         traceback.print_exc()
                         print("Failed to download the post.")
+                    time.sleep(3)
 
             else:
                 print("Invalid link found or no links given")
@@ -343,6 +344,7 @@ def main():
                     except Exception:
                         traceback.print_exc()
                         print("Failed to download the post.")
+                    time.sleep(3)
 
             else:
                 print("Invalid link found or no links found in clipboard")
