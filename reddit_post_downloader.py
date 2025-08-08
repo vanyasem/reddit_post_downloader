@@ -36,27 +36,27 @@ def is_valid_reddit_link(link):
 def verify_reddit_links_in_clipboard(clipboard_content):
     if not clipboard_content:
         return False
-    valid_links = set()
+    valid_links = list()
     for line in clipboard_content.split("\n"):
         link = line.strip()
         if not is_valid_reddit_link(link):
             return False
         else:
-            valid_links.add(link)
+            valid_links.append(link)
     return valid_links
 
 
 def verify_reddit_links_in_file(file_path):
     if not os.path.isfile(file_path):
         return False
-    valid_links = set()
+    valid_links = list()
     with open(file_path, 'r') as file:
         for line in file:
             link = line.strip()
             if not is_valid_reddit_link(link):
                 return False
             else:
-                valid_links.add(link)
+                valid_links.append(link)
 
     return valid_links
 
